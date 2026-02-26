@@ -8,9 +8,10 @@ import pickle
 import numpy as np
 import matplotlib.pyplot as plt
 import pandas as pd
+import joblib
 
 # Load Model
-model = pickle.load(open("student_model.pkl", "rb"))
+model = joblib.load("student_model.pkl")
 le = pickle.load(open("label_encoder.pkl", "rb"))
 
 st.set_page_config(page_title="Student Prediction System", layout="centered")
