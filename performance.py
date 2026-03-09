@@ -46,6 +46,7 @@ def reset_password(username, new_password):
 
 # ---------------- STUDENT DATA ---------------- #
 def add_student(name, gender, course, semester, age, contact, email):
+
     execute_query("""
         INSERT INTO Student_Details
         (STUDENT_NAME,GENDER,COURSE,SEMESTER,AGE,CONTACT_NUMBER,EMAIL_ID)
@@ -54,6 +55,7 @@ def add_student(name, gender, course, semester, age, contact, email):
 
 
 def save_marks(name, m1, m2, m3, m4, m5, backlogs, attendance, cgpa, predicted_status):
+
     execute_query("""
         INSERT INTO Marks
         (STUDENT_NAME,SUBJECT1,SUBJECT2,SUBJECT3,SUBJECT4,SUBJECT5,BACKLOGS,ATTENDANCE,CGPA,PREDICTED_STATUS)
@@ -83,9 +85,7 @@ if choice == "Login":
 
             if result:
                 st.session_state.login_status = True
-
-                # Clear old CGPA history
-                st.session_state.cgpa_history = []
+                st.session_state.cgpa_history = []  # clear previous data
 
                 st.success("Login Successful")
                 st.rerun()
@@ -98,6 +98,7 @@ if choice == "Login":
         st.sidebar.success("Logged In")
 
         if st.sidebar.button("Logout"):
+
             st.session_state.login_status = False
             st.session_state.cgpa_history = []
             st.rerun()
@@ -151,15 +152,10 @@ if choice == "Login":
                     st.error("Please fill all fields before calculating CGPA")
 
                 else:
+
                     try:
 
-                        marks = [
-                            int(sub1),
-                            int(sub2),
-                            int(sub3),
-                            int(sub4),
-                            int(sub5)
-                        ]
+                        marks = [int(sub1), int(sub2), int(sub3), int(sub4), int(sub5)]
 
                         backlogs_int = int(backlogs)
                         attendance_float = float(attendance)
@@ -181,7 +177,7 @@ if choice == "Login":
                             predicted_status
                         )
 
-                        # Store CGPA history for comparison
+                        # Store for dashboard comparison
                         st.session_state.cgpa_history.append({
                             "Semester": len(st.session_state.cgpa_history) + 1,
                             "Name": name,
@@ -207,34 +203,55 @@ if choice == "Login":
         # ---------------- DASHBOARD ---------------- #
         elif page == "Dashboard":
 
-            st.subheader("📊 Student CGPA Comparison Dashboard")
+            st.subheader("📊 Student CGPA Analytics Dashboard")
 
             if len(st.session_state.cgpa_history) == 0:
+
                 st.info("No CGPA data yet. Please calculate CGPA first.")
 
             else:
 
                 df = pd.DataFrame(st.session_state.cgpa_history)
 
-                # Predicted Status Table
+                # ---------------- Predicted Status Table ---------------- #
                 st.subheader("Predicted Academic Status")
-                st.dataframe(df[["Semester", "Name", "CGPA", "Backlogs", "Predicted_Status"]])
 
-                # Average CGPA
+                st.dataframe(df[[
+                    "Semester",
+                    "Name",
+                    "CGPA",
+                    "Backlogs",
+                    "Predicted_Status"
+                ]])
+
+                # ---------------- Average CGPA ---------------- #
                 st.metric("Average CGPA", round(df["CGPA"].mean(), 2))
 
-                # Line chart for CGPA comparison
+                # ---------------- CGPA Line Chart ---------------- #
                 st.subheader("CGPA Trend Across Semesters")
 
-                fig, ax = plt.subplots()
+                fig1, ax1 = plt.subplots()
 
-                ax.plot(df["Semester"], df["CGPA"], marker='o')
+                ax1.plot(df["Semester"], df["CGPA"], marker="o")
 
-                ax.set_xlabel("Semester")
-                ax.set_ylabel("CGPA")
-                ax.set_title("CGPA Progress")
+                ax1.set_xlabel("Semester")
+                ax1.set_ylabel("CGPA")
+                ax1.set_title("CGPA Progress")
 
-                st.pyplot(fig)
+                st.pyplot(fig1)
+
+                # ---------------- Backlogs Count Chart ---------------- #
+                st.subheader("Backlogs Count")
+
+                fig2, ax2 = plt.subplots()
+
+                df["Backlogs"].value_counts().plot(kind="bar", ax=ax2)
+
+                ax2.set_xlabel("BACKLOGS")
+                ax2.set_ylabel("COUNT")
+                ax2.set_title("Backlogs Count")
+
+                st.pyplot(fig2)
 
 # ---------------- SIGNUP ---------------- #
 elif choice == "Signup":
