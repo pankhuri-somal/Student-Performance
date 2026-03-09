@@ -1,7 +1,0 @@
-streamlit
-pandas
-numpy
-scikit-learn==1.6.1
-matplotlib
-pickle-mixin
-joblib
