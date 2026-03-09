@@ -11,8 +11,8 @@ create_tables()
 if "login_status" not in st.session_state:
     st.session_state.login_status = False
 
-if "current_result" not in st.session_state:
-    st.session_state.current_result = None
+if "cgpa_history" not in st.session_state:
+    st.session_state.cgpa_history = []
 
 # ---------------- LOGIN FUNCTIONS ---------------- #
 def login_user(username, password):
@@ -25,35 +25,20 @@ def login_user(username, password):
 
 
 def add_user(username, password):
-    user = execute_query(
-        "SELECT * FROM User_Login WHERE USERNAME=?",
-        (username,),
-        fetch=True
-    )
+    user = execute_query("SELECT * FROM User_Login WHERE USERNAME=?", (username,), fetch=True)
 
     if user:
         return False
 
-    execute_query(
-        "INSERT INTO User_Login VALUES (?,?,?)",
-        (username, password, "student")
-    )
-
+    execute_query("INSERT INTO User_Login VALUES (?,?,?)", (username, password, "student"))
     return True
 
 
 def reset_password(username, new_password):
-    user = execute_query(
-        "SELECT * FROM User_Login WHERE USERNAME=?",
-        (username,),
-        fetch=True
-    )
+    user = execute_query("SELECT * FROM User_Login WHERE USERNAME=?", (username,), fetch=True)
 
     if user:
-        execute_query(
-            "UPDATE User_Login SET PASSWORD=? WHERE USERNAME=?",
-            (new_password, username)
-        )
+        execute_query("UPDATE User_Login SET PASSWORD=? WHERE USERNAME=?", (new_password, username))
         return True
 
     return False
@@ -61,7 +46,6 @@ def reset_password(username, new_password):
 
 # ---------------- STUDENT DATA ---------------- #
 def add_student(name, gender, course, semester, age, contact, email):
-
     execute_query("""
         INSERT INTO Student_Details
         (STUDENT_NAME,GENDER,COURSE,SEMESTER,AGE,CONTACT_NUMBER,EMAIL_ID)
@@ -70,7 +54,6 @@ def add_student(name, gender, course, semester, age, contact, email):
 
 
 def save_marks(name, m1, m2, m3, m4, m5, backlogs, attendance, cgpa, predicted_status):
-
     execute_query("""
         INSERT INTO Marks
         (STUDENT_NAME,SUBJECT1,SUBJECT2,SUBJECT3,SUBJECT4,SUBJECT5,BACKLOGS,ATTENDANCE,CGPA,PREDICTED_STATUS)
@@ -101,8 +84,8 @@ if choice == "Login":
             if result:
                 st.session_state.login_status = True
 
-                # Clear old dashboard data
-                st.session_state.current_result = None
+                # Clear old CGPA history
+                st.session_state.cgpa_history = []
 
                 st.success("Login Successful")
                 st.rerun()
@@ -115,9 +98,8 @@ if choice == "Login":
         st.sidebar.success("Logged In")
 
         if st.sidebar.button("Logout"):
-
             st.session_state.login_status = False
-            st.session_state.current_result = None
+            st.session_state.cgpa_history = []
             st.rerun()
 
         page = st.sidebar.selectbox(
@@ -169,7 +151,6 @@ if choice == "Login":
                     st.error("Please fill all fields before calculating CGPA")
 
                 else:
-
                     try:
 
                         marks = [
@@ -191,7 +172,6 @@ if choice == "Login":
                             attendance_float
                         )
 
-                        # Save in database
                         save_marks(
                             name,
                             *marks,
@@ -201,15 +181,14 @@ if choice == "Login":
                             predicted_status
                         )
 
-                        # Save only this result in session
-                        st.session_state.current_result = {
-                            "name": name,
-                            "marks": marks,
-                            "backlogs": backlogs_int,
-                            "attendance": attendance_float,
-                            "cgpa": cgpa,
-                            "status": predicted_status
-                        }
+                        # Store CGPA history for comparison
+                        st.session_state.cgpa_history.append({
+                            "Semester": len(st.session_state.cgpa_history) + 1,
+                            "Name": name,
+                            "CGPA": cgpa,
+                            "Backlogs": backlogs_int,
+                            "Predicted_Status": predicted_status
+                        })
 
                         st.success(f"CGPA = {cgpa}")
                         st.info(f"Predicted Status = {predicted_status}")
@@ -228,50 +207,34 @@ if choice == "Login":
         # ---------------- DASHBOARD ---------------- #
         elif page == "Dashboard":
 
-            st.subheader("📊 Student Analytics Dashboard")
+            st.subheader("📊 Student CGPA Comparison Dashboard")
 
-            if st.session_state.current_result is None:
-
-                st.info("Dashboard is empty. Please enter academic details first.")
+            if len(st.session_state.cgpa_history) == 0:
+                st.info("No CGPA data yet. Please calculate CGPA first.")
 
             else:
 
-                data = st.session_state.current_result
+                df = pd.DataFrame(st.session_state.cgpa_history)
 
-                st.success(f"Student: {data['name']}")
+                # Predicted Status Table
+                st.subheader("Predicted Academic Status")
+                st.dataframe(df[["Semester", "Name", "CGPA", "Backlogs", "Predicted_Status"]])
 
-                st.metric("CGPA", data["cgpa"])
-                st.metric("Backlogs", data["backlogs"])
-                st.metric("Attendance", data["attendance"])
+                # Average CGPA
+                st.metric("Average CGPA", round(df["CGPA"].mean(), 2))
 
-                st.write("### Marks")
+                # Line chart for CGPA comparison
+                st.subheader("CGPA Trend Across Semesters")
 
-                marks_df = pd.DataFrame({
-                    "Subject": [
-                        "Subject1",
-                        "Subject2",
-                        "Subject3",
-                        "Subject4",
-                        "Subject5"
-                    ],
-                    "Marks": data["marks"]
-                })
-
-                st.dataframe(marks_df)
-
-                # CGPA Chart
                 fig, ax = plt.subplots()
 
-                ax.bar(["CGPA"], [data["cgpa"]])
+                ax.plot(df["Semester"], df["CGPA"], marker='o')
 
-                ax.set_title("CGPA")
+                ax.set_xlabel("Semester")
+                ax.set_ylabel("CGPA")
+                ax.set_title("CGPA Progress")
 
                 st.pyplot(fig)
-
-                st.write("### Predicted Status")
-
-                st.success(data["status"])
-
 
 # ---------------- SIGNUP ---------------- #
 elif choice == "Signup":
@@ -288,7 +251,6 @@ elif choice == "Signup":
 
         else:
             st.warning("Username already exists")
-
 
 # ---------------- FORGOT PASSWORD ---------------- #
 elif choice == "Forgot Password":
