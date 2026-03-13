@@ -6,7 +6,7 @@ def create_tables():
     conn = sqlite3.connect(DB_NAME)
     cursor = conn.cursor()
 
-    # User login table
+    # Login table
     cursor.execute("""
     CREATE TABLE IF NOT EXISTS User_Login(
         USERNAME TEXT PRIMARY KEY,
@@ -15,24 +15,24 @@ def create_tables():
     )
     """)
 
-    # Student details table
+    # Student details
     cursor.execute("""
     CREATE TABLE IF NOT EXISTS Student_Details(
-        ID INTEGER PRIMARY KEY AUTOINCREMENT,
+        USERNAME TEXT,
         STUDENT_NAME TEXT,
         GENDER TEXT,
         COURSE TEXT,
-        SEMESTER INTEGER,
         AGE INTEGER,
         CONTACT_NUMBER TEXT,
         EMAIL_ID TEXT
     )
     """)
 
-    # Marks table with predicted status
+    # Marks table (semester wise)
     cursor.execute("""
     CREATE TABLE IF NOT EXISTS Marks(
-        STUDENT_NAME TEXT,
+        USERNAME TEXT,
+        SEMESTER INTEGER,
         SUBJECT1 INTEGER,
         SUBJECT2 INTEGER,
         SUBJECT3 INTEGER,
@@ -53,9 +53,11 @@ def execute_query(query, params=(), fetch=False):
     conn = sqlite3.connect(DB_NAME)
     cursor = conn.cursor()
     cursor.execute(query, params)
+
     data = None
     if fetch:
         data = cursor.fetchall()
+
     conn.commit()
     conn.close()
     return data
