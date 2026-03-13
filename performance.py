@@ -5,19 +5,29 @@ import matplotlib.pyplot as plt
 from database import create_tables, execute_query
 from utils import calculate_cgpa, predict_status
 
-# ---------------- SETUP ---------------- #
 create_tables()
+
+# ---------------- SESSION STATE ---------------- #
 
 if "login_status" not in st.session_state:
     st.session_state.login_status = False
 
-if "cgpa_history" not in st.session_state:
-    st.session_state.cgpa_history = []
+if "username" not in st.session_state:
+    st.session_state.username = ""
 
-if "marks_history" not in st.session_state:
-    st.session_state.marks_history = []
+if "signup_success" not in st.session_state:
+    st.session_state.signup_success = False
+
+# remember login
+if "saved_username" not in st.session_state:
+    st.session_state.saved_username = ""
+
+if "saved_password" not in st.session_state:
+    st.session_state.saved_password = ""
+
 
 # ---------------- LOGIN FUNCTIONS ---------------- #
+
 def login_user(username, password):
     data = execute_query(
         "SELECT * FROM User_Login WHERE USERNAME=? AND PASSWORD=?",
@@ -28,84 +38,142 @@ def login_user(username, password):
 
 
 def add_user(username, password):
-    user = execute_query("SELECT * FROM User_Login WHERE USERNAME=?", (username,), fetch=True)
+
+    user = execute_query(
+        "SELECT * FROM User_Login WHERE USERNAME=?",
+        (username,),
+        fetch=True
+    )
 
     if user:
         return False
 
-    execute_query("INSERT INTO User_Login VALUES (?,?,?)", (username, password, "student"))
+    execute_query(
+        "INSERT INTO User_Login VALUES (?,?,?)",
+        (username, password, "student")
+    )
+
     return True
 
 
-def reset_password(username, new_password):
-    user = execute_query("SELECT * FROM User_Login WHERE USERNAME=?", (username,), fetch=True)
+# ---------------- FORGOT PASSWORD ---------------- #
 
-    if user:
-        execute_query("UPDATE User_Login SET PASSWORD=? WHERE USERNAME=?", (new_password, username))
-        return True
+def update_password(username, new_password):
 
-    return False
+    execute_query(
+        "UPDATE User_Login SET PASSWORD=? WHERE USERNAME=?",
+        (new_password, username)
+    )
 
 
-# ---------------- STUDENT DATA ---------------- #
-def add_student(name, gender, course, semester, age, contact, email):
+# ---------------- GET STUDENT DETAILS ---------------- #
 
-    execute_query("""
+def get_student(username):
+
+    data = execute_query(
+        "SELECT * FROM Student_Details WHERE USERNAME=?",
+        (username,),
+        fetch=True
+    )
+
+    return data[0] if data else None
+
+
+# ---------------- SAVE / UPDATE STUDENT DETAILS ---------------- #
+
+def save_student(username, name, gender, course, age, contact, email):
+
+    student = get_student(username)
+
+    if student:
+        execute_query("""
+        UPDATE Student_Details
+        SET STUDENT_NAME=?, GENDER=?, COURSE=?, AGE=?, CONTACT_NUMBER=?, EMAIL_ID=?
+        WHERE USERNAME=?
+        """,(name,gender,course,age,contact,email,username))
+    else:
+        execute_query("""
         INSERT INTO Student_Details
-        (STUDENT_NAME,GENDER,COURSE,SEMESTER,AGE,CONTACT_NUMBER,EMAIL_ID)
+        (USERNAME,STUDENT_NAME,GENDER,COURSE,AGE,CONTACT_NUMBER,EMAIL_ID)
         VALUES (?,?,?,?,?,?,?)
-    """, (name, gender, course, semester, age, contact, email))
+        """,(username,name,gender,course,age,contact,email))
 
 
-def save_marks(name, m1, m2, m3, m4, m5, backlogs, attendance, cgpa, predicted_status):
+# ---------------- SAVE MARKS ---------------- #
+
+def save_marks(username, semester, m1, m2, m3, m4, m5, backlogs, attendance, cgpa, predicted_status):
 
     execute_query("""
-        INSERT INTO Marks
-        (STUDENT_NAME,SUBJECT1,SUBJECT2,SUBJECT3,SUBJECT4,SUBJECT5,BACKLOGS,ATTENDANCE,CGPA,PREDICTED_STATUS)
-        VALUES (?,?,?,?,?,?,?,?,?,?)
-    """, (name, m1, m2, m3, m4, m5, backlogs, attendance, cgpa, predicted_status))
+    INSERT INTO Marks
+    VALUES (?,?,?,?,?,?,?,?,?,?,?)
+    """,(username,semester,m1,m2,m3,m4,m5,backlogs,attendance,cgpa,predicted_status))
+
+
+# ---------------- GET HISTORY ---------------- #
+
+def get_history(username):
+
+    data = execute_query(
+        "SELECT * FROM Marks WHERE USERNAME=? ORDER BY SEMESTER",
+        (username,),
+        fetch=True
+    )
+
+    return data
 
 
 # ---------------- STREAMLIT UI ---------------- #
+
 st.title("🎓 Student CGPA Management System")
 
 menu = ["Login", "Signup", "Forgot Password"]
-choice = st.sidebar.selectbox("Menu", menu)
+
+if st.session_state.signup_success:
+    choice = "Login"
+    st.session_state.signup_success = False
+else:
+    choice = st.sidebar.selectbox("Menu", menu)
+
 
 # ---------------- LOGIN ---------------- #
+
 if choice == "Login":
 
     if not st.session_state.login_status:
 
         st.subheader("Login")
 
-        username = st.text_input("Username")
-        password = st.text_input("Password", type="password")
+        username = st.text_input("Username", value=st.session_state.saved_username)
+        password = st.text_input("Password", type="password", value=st.session_state.saved_password)
+
+        remember = st.checkbox("Remember Username & Password")
 
         if st.button("Login"):
 
             result = login_user(username, password)
 
             if result:
+
                 st.session_state.login_status = True
-                st.session_state.cgpa_history = []
-                st.session_state.marks_history = []
+                st.session_state.username = username
+
+                # save credentials
+                if remember:
+                    st.session_state.saved_username = username
+                    st.session_state.saved_password = password
 
                 st.success("Login Successful")
                 st.rerun()
 
             else:
-                st.error("Incorrect Username or Password")
+                st.error("Invalid Login")
 
     else:
 
-        st.sidebar.success("Logged In")
+        st.sidebar.success("Logged in as " + st.session_state.username)
 
         if st.sidebar.button("Logout"):
-
             st.session_state.login_status = False
-            st.session_state.cgpa_history = []
-            st.session_state.marks_history = []
             st.rerun()
 
         page = st.sidebar.selectbox(
@@ -113,34 +181,62 @@ if choice == "Login":
             ["Student Details", "Academic Details", "Dashboard"]
         )
 
+
         # ---------------- STUDENT DETAILS ---------------- #
+
         if page == "Student Details":
 
-            st.subheader("Enter Student Details")
+            st.subheader("Student Details")
 
-            name = st.text_input("Name")
-            gender = st.selectbox("Gender", ["Male", "Female"])
-            course = st.text_input("Course")
-            semester = st.text_input("Semester")
-            age = st.text_input("Age")
-            contact = st.text_input("Contact")
-            email = st.text_input("Email")
+            student = get_student(st.session_state.username)
+
+            if student:
+                name_default = student[1]
+                gender_default = student[2]
+                course_default = student[3]
+                age_default = student[4]
+                contact_default = student[5]
+                email_default = student[6]
+            else:
+                name_default = ""
+                gender_default = "Male"
+                course_default = ""
+                age_default = ""
+                contact_default = ""
+                email_default = ""
+
+            name = st.text_input("Name", value=name_default)
+            gender = st.selectbox(
+                "Gender", ["Male","Female"],
+                index=0 if gender_default=="Male" else 1
+            )
+            course = st.text_input("Course", value=course_default)
+            age = st.text_input("Age", value=age_default)
+            contact = st.text_input("Contact", value=contact_default)
+            email = st.text_input("Email", value=email_default)
 
             if st.button("Save Student"):
 
-                if not all([name, gender, course, semester, age, contact, email]):
-                    st.error("Please fill all student fields")
+                save_student(
+                    st.session_state.username,
+                    name,
+                    gender,
+                    course,
+                    age,
+                    contact,
+                    email
+                )
 
-                else:
-                    add_student(name, gender, course, semester, age, contact, email)
-                    st.success("Student Details Saved")
+                st.success("Student Details Saved / Updated")
+
 
         # ---------------- ACADEMIC DETAILS ---------------- #
+
         elif page == "Academic Details":
 
-            st.subheader("Enter Academic Details")
+            st.subheader("Enter Marks")
 
-            name = st.text_input("Student Name")
+            semester = st.number_input("Semester",1,8)
 
             sub1 = st.text_input("Subject 1 Marks")
             sub2 = st.text_input("Subject 2 Marks")
@@ -148,149 +244,150 @@ if choice == "Login":
             sub4 = st.text_input("Subject 4 Marks")
             sub5 = st.text_input("Subject 5 Marks")
 
-            backlogs = st.text_input("Number of Backlogs")
-            attendance = st.text_input("Attendance Percentage")
+            backlogs = st.text_input("Backlogs")
+            attendance = st.text_input("Attendance")
 
             if st.button("Calculate CGPA"):
 
-                if not all([name, sub1, sub2, sub3, sub4, sub5, backlogs, attendance]):
-                    st.error("Please fill all fields before calculating CGPA")
+                marks = [
+                    int(sub1), int(sub2), int(sub3),
+                    int(sub4), int(sub5)
+                ]
 
-                else:
+                cgpa = calculate_cgpa(marks)
 
-                    try:
+                status = predict_status(
+                    cgpa,
+                    int(backlogs),
+                    int(attendance)
+                )
 
-                        marks = [int(sub1), int(sub2), int(sub3), int(sub4), int(sub5)]
+                save_marks(
+                    st.session_state.username,
+                    int(semester),
+                    int(sub1),
+                    int(sub2),
+                    int(sub3),
+                    int(sub4),
+                    int(sub5),
+                    int(backlogs),
+                    int(attendance),
+                    cgpa,
+                    status
+                )
 
-                        backlogs_int = int(backlogs)
-                        attendance_float = float(attendance)
+                st.success(f"CGPA = {cgpa}")
+                st.info(f"Predicted Status = {status}")
 
-                        cgpa = calculate_cgpa(marks)
-
-                        predicted_status = predict_status(
-                            cgpa,
-                            backlogs_int,
-                            attendance_float
-                        )
-
-                        save_marks(
-                            name,
-                            *marks,
-                            backlogs_int,
-                            attendance_float,
-                            cgpa,
-                            predicted_status
-                        )
-
-                        # Save history
-                        st.session_state.cgpa_history.append({
-                            "Semester": len(st.session_state.cgpa_history) + 1,
-                            "Name": name,
-                            "CGPA": cgpa,
-                            "Backlogs": backlogs_int,
-                            "Predicted_Status": predicted_status
-                        })
-
-                        st.session_state.marks_history.append(marks)
-
-                        st.success(f"CGPA = {cgpa}")
-                        st.info(f"Predicted Status = {predicted_status}")
-
-                    except ValueError:
-                        st.error("Please enter valid numeric values")
 
         # ---------------- DASHBOARD ---------------- #
+
         elif page == "Dashboard":
 
-            st.subheader("📊 Student Analytics Dashboard")
+            st.subheader("Student Dashboard")
 
-            if len(st.session_state.cgpa_history) == 0:
+            history = get_history(st.session_state.username)
 
-                st.info("No CGPA data yet. Please calculate CGPA first.")
+            if history:
 
-            else:
-
-                df = pd.DataFrame(st.session_state.cgpa_history)
-
-                # ---------------- Table ---------------- #
-                st.subheader("Predicted Academic Status")
+                df = pd.DataFrame(history, columns=[
+                    "Username","Semester",
+                    "Sub1","Sub2","Sub3","Sub4","Sub5",
+                    "Backlogs","Attendance","CGPA","Status"
+                ])
 
                 st.dataframe(df)
 
-                # ---------------- CASE 1: ONE SEMESTER ---------------- #
                 if len(df) == 1:
 
-                    st.subheader("Subject Marks Chart")
+                    st.subheader("Subject Wise Marks")
 
-                    marks = st.session_state.marks_history[0]
+                    subjects = ["Sub1","Sub2","Sub3","Sub4","Sub5"]
+                    marks = df.iloc[0][subjects]
 
                     fig, ax = plt.subplots()
 
-                    subjects = ["Sub1","Sub2","Sub3","Sub4","Sub5"]
-
                     ax.bar(subjects, marks)
 
-                    ax.set_xlabel("Subjects")
+                    ax.set_title("Subject Marks")
                     ax.set_ylabel("Marks")
-                    ax.set_title("Marks Distribution")
 
                     st.pyplot(fig)
 
-                # ---------------- CASE 2: MULTIPLE SEMESTERS ---------------- #
                 else:
 
-                    st.subheader("CGPA Trend Across Semesters")
+                    st.subheader("Semester CGPA Comparison")
 
-                    fig1, ax1 = plt.subplots()
+                    fig, ax = plt.subplots()
 
-                    ax1.plot(df["Semester"], df["CGPA"], marker="o")
+                    ax.plot(df["Semester"], df["CGPA"], marker="o")
 
-                    ax1.set_xlabel("Semester")
-                    ax1.set_ylabel("CGPA")
-                    ax1.set_title("CGPA Progress")
+                    ax.set_xlabel("Semester")
+                    ax.set_ylabel("CGPA")
+                    ax.set_title("CGPA Trend")
 
-                    st.pyplot(fig1)
+                    ax.set_xticks(df["Semester"])
 
-                    st.subheader("Backlogs Count")
+                    st.pyplot(fig)
+
+
+                    st.subheader("Backlog Comparison")
 
                     fig2, ax2 = plt.subplots()
 
-                    df["Backlogs"].value_counts().plot(kind="bar", ax=ax2)
+                    ax2.bar(df["Semester"], df["Backlogs"])
 
-                    ax2.set_xlabel("Backlogs")
-                    ax2.set_ylabel("Count")
-                    ax2.set_title("Backlogs Count")
+                    ax2.set_xlabel("Semester")
+                    ax2.set_ylabel("Backlogs")
+                    ax2.set_title("Backlogs per Semester")
+
+                    ax2.set_xticks(df["Semester"])
+                    ax2.set_yticks(range(0, int(df["Backlogs"].max()) + 1))
 
                     st.pyplot(fig2)
 
+            else:
+                st.info("No academic data yet")
+
+
 # ---------------- SIGNUP ---------------- #
+
 elif choice == "Signup":
 
     st.subheader("Create Account")
 
-    new_user = st.text_input("Username")
-    new_pass = st.text_input("Password", type="password")
+    new_user = st.text_input("Create Username")
+    new_pass = st.text_input("Create Password", type="password")
+    confirm_pass = st.text_input("Confirm Password", type="password")
 
-    if st.button("Signup"):
+    if st.button("Save Account"):
 
-        if add_user(new_user, new_pass):
-            st.success("Account Created Successfully")
+        if new_pass != confirm_pass:
+            st.error("Passwords do not match")
 
         else:
-            st.warning("Username already exists")
+
+            if add_user(new_user,new_pass):
+
+                st.success("Account Created Successfully")
+                st.session_state.signup_success = True
+                st.rerun()
+
+            else:
+                st.error("Username already exists")
+
 
 # ---------------- FORGOT PASSWORD ---------------- #
+
 elif choice == "Forgot Password":
 
     st.subheader("Reset Password")
 
-    user = st.text_input("Enter Username")
-    new_password = st.text_input("Enter New Password", type="password")
+    username = st.text_input("Enter Username")
+    new_password = st.text_input("New Password", type="password")
 
-    if st.button("Reset"):
+    if st.button("Reset Password"):
 
-        if reset_password(user, new_password):
-            st.success("Password Reset Successful")
+        update_password(username, new_password)
 
-        else:
-            st.error("Username not found")
+        st.success("Password Updated Successfully")
