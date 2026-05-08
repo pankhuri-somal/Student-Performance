@@ -2,11 +2,14 @@ import sqlite3
 
 DB_NAME = "student.db"
 
+
 def create_tables():
+
     conn = sqlite3.connect(DB_NAME)
     cursor = conn.cursor()
 
-    # Login table
+    # ---------------- USER LOGIN TABLE ---------------- #
+
     cursor.execute("""
     CREATE TABLE IF NOT EXISTS User_Login(
         USERNAME TEXT PRIMARY KEY,
@@ -15,7 +18,8 @@ def create_tables():
     )
     """)
 
-    # Student details
+    # ---------------- STUDENT DETAILS ---------------- #
+
     cursor.execute("""
     CREATE TABLE IF NOT EXISTS Student_Details(
         USERNAME TEXT,
@@ -28,7 +32,8 @@ def create_tables():
     )
     """)
 
-    # Marks table (semester wise)
+    # ---------------- MARKS TABLE ---------------- #
+
     cursor.execute("""
     CREATE TABLE IF NOT EXISTS Marks(
         USERNAME TEXT,
@@ -49,15 +54,21 @@ def create_tables():
     conn.close()
 
 
+# ---------------- EXECUTE QUERY FUNCTION ---------------- #
+
 def execute_query(query, params=(), fetch=False):
+
     conn = sqlite3.connect(DB_NAME)
     cursor = conn.cursor()
+
     cursor.execute(query, params)
 
     data = None
+
     if fetch:
         data = cursor.fetchall()
 
     conn.commit()
     conn.close()
+
     return data
